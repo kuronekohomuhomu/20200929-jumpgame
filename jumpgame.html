@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ジャンプゲーム</title>
+<script>
+let canvas, context;
+let x, y, vx, vy, dir, floor;
+let status = "stop";
+let gameStatus = "start";
+let startTime;
+// 敵データ
+let enemies = new Array();
+const enemyData = [[0,70,1,0],[300,70,1,0],[300,220,-1,1],[550,220,-1,1],
+    [0,370,1,2],[300,370,1,2],[550,520,-1,3]];
+
+// 敵クラス
+class Enemy {
+    constructor(data) {
+        this.x = data[0];
+        this.y = data[1];
+        this.speed = Math.random() + 0.5;
+        this.vx = data[2];
+        this.vy = 0;
+        this.floor = data[3];
+    }
+    update() {
+        // 移動
+        this.x += this.vx * this.speed;
+        this.y += this.vy * this.speed;
+        if ((this.floor%2 == 0) && (this.x > 560)) [this.vx, this.vy] = [0, 1];
+        if ((this.floor%2 == 1) && (this.x < 10)) [this.vx, this.vy] = [0, 1];
+        if ((this.vy > 0) && (this.y > (this.floor+1) * 150 + 70)) {
+            this.floor++;
+            [this.vx, this.vy] = [1, 0];
+            if (this.floor%2 == 1) this.vx = -1;
+        }
+        if (this.floor > 3) {
+            [this.x, this.y, this.vx, this.vy] = [0, 70, 1, 0];
+            this.floor = 0;
+        }
+        // 描画
+        const text = String.fromCodePoint("0x1f40d");
+        drawText(text, this.x+15, this.y+15);
+    }
+}
+
+const init = () => {
+    // キャンバスの取得
+    canvas = document.getElementById("map");
+    context = canvas.getContext("2d");
+    // キーイベントの登録
+    document.addEventListener("keydown", move);
+    document.addEventListener("keyup", stop);
+    // ゲーム開始
+    initGame();
+    setInterval(update, 20);
+}
+
+const initGame = () => {
+    // ゲームの初期化
+    for (let i = 0; i < enemyData.length; i++) {
+        enemies[i] = new Enemy(enemyData[i]);
+    }
+    [x, y, vx, vy, dir, floor] = [0, 520, 0, 0, 0, 3];
+    [gameStatus, status] = ["start", "stop"];
+    startTime = Date.now();
+}
+
+const update = () => {
+    // マップの描画
+    context.fillStyle = "skyblue";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < 4; i++) {
+        context.fillStyle = "green";
+        context.fillRect(0, i*150+100, 600, 50);
+        context.fillStyle = "saddlebrown";
+        context.fillRect((i%2)*550, i*150, 50, 100);
+    }
+    // プレイヤーの移動
+    const floorY = floor * 150 + 70;
+    if (status == "walk") {
+        // 上下左右制限
+        if (vy < 0) {
+            if ((floor%2 == 0) && (x > 50)) vy = 0;
+            if ((floor%2 == 1) && (x < 550)) vy = 0;
+        } else if ((vy > 0) && (y >= floorY)) {
+            if ((floor%2 == 1) && (x > 50)) vy = 0;
+            if ((floor%2 == 0) && (x < 550)) vy = 0;
+            if (floor == 3) vy = 0;
+        }
+        // 左右移動制限
+        if (vx != 0) {
+            if (y != floorY) vx = 0;
+            if ((vy == 0) && (x < 0)) [x, vx] = [0, 0];
+            if ((vy == 0) && (x > 570)) [x, vx] = [570, 0];
+        }
+    } else if (status == "jump") {
+        // ジャンプ
+        vy += 0.1;
+        if (y > floorY) [y, vx, vy, status] = [floorY, 0, 0, "stop"];
+        if ((x < 0) || (x > 570)) vx *= -1;
+    }
+    if (gameStatus == "start") {
+        // 移動
+        x += vx;
+        y += vy;
+        // フロア移動
+        if (((vy < 0) && (y < (floor-1)*150+70))
+            || ((vy > 0) && (y > (floor+1)*150+70))) {
+            if (vy < 0) floor--;
+            if (vy > 0) floor++;
+            [y, vy, status] = [floor*150+70, 0, "stop"];
+        }
+        if (y < -5) gameStatus = "clear";
+    }
+    // 敵の移動
+    for (enemy of enemies) {
+        enemy.update();
+        if (gameStatus == "start") {
+            const dx = Math.abs(x - enemy.x);
+            const dy = Math.abs(y - enemy.y);
+            if ((dx < 25) && (dy < 25)) gameStatus = "end";
+        }
+    }
+    // プレイヤーの描画
+    const text = String.fromCodePoint("0x1f438");
+    drawText(text, x+15, y+15);
+    // タイム、メッセージの表示
+    if (gameStatus == "start") {
+        let time = ((Date.now() - startTime) / 1000).toFixed(2);
+        document.getElementById("time").innerText = ("0" + time).slice(-5);
+    }
+    if (gameStatus == "end") drawText("GAME OVER!!", 300, 200, 60, "red");
+    if (gameStatus == "clear") drawText("CLEAR!!", 300, 200, 60, "blue");
+}
+
+const move = event => {
+    // キーを押したとき
+    if ((gameStatus == "start") && ((status == "stop") || (status == "walk"))) {
+        if (event.key == "x") {
+            [vx, vy, status] = [2*dir, -3.5, "jump"];
+        }
+        if (event.key == "ArrowUp") [vx, vy, dir, status] = [0, -2, 0, "walk"];
+        if (event.key == "ArrowDown") [vx, vy, dir, status] = [0, 2, 0, "walk"];
+        if (event.key == "ArrowLeft") [vx, vy, dir, status] = [-2, 0, -1, "walk"];
+        if (event.key == "ArrowRight") [vx, vy, dir, status] = [2, 0, 1, "walk"];
+    }
+}
+
+const stop = event => {
+    // キーを放したとき
+    if ((gameStatus == "start") && (status == "walk")
+        && ((event.key == "ArrowUp") || (event.key == "ArrowDown")
+        || (event.key == "ArrowLeft") || (event.key == "ArrowRight"))) {
+            [vx, vy, dir, status] = [0, 0, 0, "stop"];
+    }
+}
+
+const drawText = (text, x, y, size = 30, color = null) => {
+    // テキストの描画
+    context.font = `${size}px sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    if (color != null) context.fillStyle = color;
+    context.fillText(text, x, y);
+}
+</script>
+</head>
+<body onload="init()">
+<p>ジャンプゲーム</p>
+<input type="button" id="restart" value="はじめから" onclick="initGame()">
+Time: <span id="time"></span><hr>
+<canvas id="map" width="600" height="600"></canvas>
+</body>
+</html>
